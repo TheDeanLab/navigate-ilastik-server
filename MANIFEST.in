@@ -1,0 +1,2 @@
+include aslm_server/config.json
+global_exclude *.pyc
