@@ -1,20 +1,20 @@
 import base64
-from flask import Blueprint, request, escape, send_file
-
 from os.path import exists
 from io import BytesIO
 
-import numpy
+from flask import Blueprint, request, escape, send_file
 
+import numpy
+import vigra
 from ilastik import app
+from ilastik.workflows.pixelClassification import PixelClassificationWorkflow
+from ilastik.applets.dataSelection.opDataSelection import PreloadedArrayDatasetInfo
 
 bp = Blueprint('ilastik', __name__, url_prefix='/ilastik')
 
 class IlastikService:
     def __init__(self):
         self.ilastikShell = None
-        self.exportArgs = None
-        self.inputArgs = None
 
     def loadProjectFile(self, fileName):
         parser = app._argparser()
@@ -25,22 +25,20 @@ class IlastikService:
             self.ilastikShell = app.main(known, unknown)
 
             #export config
-            self.exportArgs, unknown = self.ilastikShell.projectManager.workflow.dataExportApplet.parse_known_cmdline_args(['--export_source=Simple Segmentation'])
-            self.ilastikShell.projectManager.workflow.dataExportApplet.configure_operator_with_parsed_args(self.exportArgs)
-            #input config
-            self.inputArgs, unknown = self.ilastikShell.projectManager.workflow.batchProcessingApplet.parse_known_cmdline_args([])
+            exportArgs, unknown = self.ilastikShell.projectManager.workflow.dataExportApplet.parse_known_cmdline_args(['--export_source=Simple Segmentation'])
+            self.ilastikShell.projectManager.workflow.dataExportApplet.configure_operator_with_parsed_args(exportArgs)
         except:
             return False
-        return True
+        return isinstance(self.ilastikShell.workflow, PixelClassificationWorkflow)
     
-    def segmentImage(self, preloaded_array=None, fileName=''):
-        # self.inputArgs.raw_data = [fileName]
-        if preloaded_array is not None:
-            self.inputArgs.raw_data = ['preloaded_array']
-            self.ilastikShell.projectManager.workflow.dataSelectionApplet.preloaded_array = preloaded_array
-        else:
-            self.inputArgs.raw_data = [fileName]
-        return self.ilastikShell.projectManager.workflow.batchProcessingApplet.run_export_from_parsed_args(self.inputArgs)
+    def segmentImage(self, image_data):
+        # may need to tag the data array
+        # input_data = vigra.taggedView(input_data, "yxc")
+        role_data_dict = [{
+            'Raw Data':PreloadedArrayDatasetInfo(preloaded_array=image_data),
+            # 'Prediction Mask': None
+            }]
+        return self.ilastikShell.projectManager.workflow.batchProcessingApplet.run_export(role_data_dict, export_to_array=True)
 
 ilastik_module = IlastikService()
 
@@ -95,7 +93,7 @@ def get_segmentation():
     img_shape = request.json['shape']
     try:
         img_data = numpy.frombuffer(base64.b64decode(img_data), dtype=img_dtype).reshape(img_shape)
-        r = ilastik_module.segmentImage(preloaded_array=img_data)
+        r = ilastik_module.segmentImage(img_data)
         return send_np_array(r[0])
     except:
         return 'internal error', 500
