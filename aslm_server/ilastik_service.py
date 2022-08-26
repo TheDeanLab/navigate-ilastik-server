@@ -31,13 +31,13 @@ class IlastikService:
             return False
         return isinstance(self.ilastikShell.workflow, PixelClassificationWorkflow)
     
-    def segmentImage(self, image_data):
+    def segmentImage(self, img_data):
         # may need to tag the data array
         # input_data = vigra.taggedView(input_data, "yxc")
         role_data_dict = [{
-            'Raw Data':PreloadedArrayDatasetInfo(preloaded_array=image_data),
+            'Raw Data':PreloadedArrayDatasetInfo(preloaded_array=img),
             # 'Prediction Mask': None
-            }]
+            } for img in img_data]
         return self.ilastikShell.projectManager.workflow.batchProcessingApplet.run_export(role_data_dict, export_to_array=True)
 
 ilastik_module = IlastikService()
@@ -46,7 +46,7 @@ def send_np_array(data):
     """Send a numpy array to the client side   
     """
     buf = BytesIO()
-    numpy.savez_compressed(buf, data)
+    numpy.savez_compressed(buf, *data)
     buf.seek(0)
 
     return send_file(
@@ -92,8 +92,8 @@ def get_segmentation():
     img_dtype = request.json['dtype']
     img_shape = request.json['shape']
     try:
-        img_data = numpy.frombuffer(base64.b64decode(img_data), dtype=img_dtype).reshape(img_shape)
+        img_data = [numpy.frombuffer(base64.b64decode(img), dtype=img_dtype).reshape(img_shape) for img in img_data]
         r = ilastik_module.segmentImage(img_data)
-        return send_np_array(r[0])
+        return send_np_array(r)
     except:
         return 'internal error', 500
