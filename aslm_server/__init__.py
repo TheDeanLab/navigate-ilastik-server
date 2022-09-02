@@ -14,6 +14,7 @@ def load_config():
 
 def create_app():
     app = Flask(__name__, instance_relative_config=True)
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
     # load service configuration from 'config.json' file.
     services = load_config()
