@@ -1,6 +1,7 @@
 import base64
 from os.path import exists
 from io import BytesIO
+import json
 
 from flask import Blueprint, request, escape, send_file
 
@@ -16,6 +17,9 @@ class IlastikService:
     def __init__(self):
         self.ilastikShell = None
 
+    def convert_numpy_rgb(self, rgb_list):
+        return ['#{:02x}{:02x}{:02x}'.format(rgb_color[0], rgb_color[1], rgb_color[2]) for rgb_color in rgb_list]
+
     def loadProjectFile(self, fileName):
         parser = app._argparser()
 
@@ -29,7 +33,15 @@ class IlastikService:
             self.ilastikShell.projectManager.workflow.dataExportApplet.configure_operator_with_parsed_args(exportArgs)
         except:
             return False
-        return isinstance(self.ilastikShell.workflow, PixelClassificationWorkflow)
+        label_info = None
+        if isinstance(self.ilastikShell.workflow, PixelClassificationWorkflow):
+            opPixelClassification = self.ilastikShell.projectManager.workflow.pcApplet.topLevelOperator
+            label_info = {
+                'names': opPixelClassification.LabelNames.value,
+                'label_colors': self.convert_numpy_rgb(opPixelClassification.LabelColors.value),
+                'segmentation_colors': self.convert_numpy_rgb(opPixelClassification.PmapColors.value)
+            }
+        return label_info
     
     def segmentImage(self, img_data):
         # may need to tag the data array
@@ -69,8 +81,9 @@ def load_pretrained_project():
     if not exists(project_name):
         return "Project file does not exist", 500
     try:
-        if ilastik_module.loadProjectFile(project_name):
-            return "Success"
+        r = ilastik_module.loadProjectFile(project_name)
+        if r:
+            return json.dumps(r)
         else:
             return "Couldn't load the project file", 500
     except:
