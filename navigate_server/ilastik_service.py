@@ -3,7 +3,8 @@ from os.path import exists
 from io import BytesIO
 import json
 
-from flask import Blueprint, request, escape, send_file
+from flask import Blueprint, request, send_file
+from markupsafe import escape
 
 import numpy
 import vigra
